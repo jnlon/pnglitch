@@ -1,2 +1,2 @@
-# pnglitch_webapp
-FCGI program for glitching PNG images
+# pnglitch\_webapp
+Commandline version of pnglitch\_webapp 
