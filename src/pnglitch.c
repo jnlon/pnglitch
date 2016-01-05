@@ -2,8 +2,8 @@
 #include <stdlib.h>
 #include <zlib.h>
 #include <arpa/inet.h>
-#include <fcgi_stdio.h>
 #include <png.h>
+#include <stdio.h>
 
 #include "libs.h"
 #include "debug.h"

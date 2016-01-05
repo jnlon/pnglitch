@@ -1,11 +1,10 @@
 #include <zlib.h>
 #include <png.h>
 #include <stdlib.h>
-#include <fcgi_stdio.h>
+#include <stdio.h>
 #include <setjmp.h>
 
 #include "bufs.h"
-#include "webio.h"
 #include "globals.h"
 #include "libs.h"
 #include "debug.h"

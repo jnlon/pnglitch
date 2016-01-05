@@ -2,7 +2,6 @@
 #include <png.h>
 #include <string.h>
 #include <stdlib.h>
-#include <fcgi_stdio.h>
 #include <zlib.h>
 #include <stdint.h>
 #include <sys/stat.h>
@@ -12,19 +11,21 @@
 #include <time.h>
 
 #include "libs.h"
-#include "webio.h"
 #include "globals.h"
 #include "bufs.h"
 #include "pnglitch.h"
 #include "debug.h"
 
-//To properly free memory from fcgi library
-void OS_LibShutdown(void);
-
 //Globals, needed for callbacks
 long long MY_PNG_READ_OFFSET;
 unsigned char *ENTIRE_PNG_BUF;
 long long PNG_LENGTH; 
+
+#define E_GLITCH "Error while glitching image!\n"
+#define E_INVALID "Input file is not a valid PNG!\n"
+#define MAX_PATH_LENGTH 256*2
+#define NUM_OUTPUT_FILES 7
+#define DIR_SEP "/"
 
 /* Use Libpng to tansform the input into into RGB format 
  * (basically re-encode image using all filter methods)
@@ -32,14 +33,14 @@ long long PNG_LENGTH;
  * Then, glitch this buffer manually
  */
 
-pthread_t begin(char* infname_sans_ext, unsigned char *png_buf, long long png_length) {
+int begin(char* base_file_name, unsigned char *png_buf, long long png_length) {
 
   MY_PNG_READ_OFFSET = 0;
   PNG_LENGTH = png_length; 
   ENTIRE_PNG_BUF = png_buf;
 
   if (png_sig_cmp(ENTIRE_PNG_BUF, 0, 8) != 0) {
-    print_error_html("Upload is not a valid PNG file!");
+    error(-1, "png_sig_cmp", E_INVALID);
     return -1;
   }
 
@@ -53,7 +54,7 @@ pthread_t begin(char* infname_sans_ext, unsigned char *png_buf, long long png_le
     DEBUG_PRINT(("libpng called setjmp!\n"));
     my_deinit_libpng(pm);
     free(ENTIRE_PNG_BUF);
-    print_error_html("Error processing (likely corrupt) image");
+    error(-1, "libpng", "libpng encountered an error\n");
     return -1;
   }
 
@@ -83,7 +84,7 @@ pthread_t begin(char* infname_sans_ext, unsigned char *png_buf, long long png_le
   ihdr_infos.width            = png_get_image_width(pm->read_ptr, pm->info_ptr);
 
   if (ihdr_infos.color_type != 2) {
-    print_error_html(GLITCH_ERROR);
+    DEBUG_PRINT((E_INVALID));
     free(ENTIRE_PNG_BUF);
     my_deinit_libpng(pm);
     DEBUG_PRINT(("Looks like libpng could not correctly convert to RGB\n"));
@@ -104,9 +105,9 @@ pthread_t begin(char* infname_sans_ext, unsigned char *png_buf, long long png_le
 
   ihdr_infos.scanline_len = (ihdr_infos.bytes_per_pixel * ihdr_infos.width) + 1;
 
-  DEBUG_PRINT(("HEIGHT: %lu\n", ihdr_infos.height));
-  DEBUG_PRINT(("WIDTH: %lu\n", ihdr_infos.width));
-  DEBUG_PRINT(("BIT_DEPTH: %lu\n", ihdr_infos.bit_depth));
+  DEBUG_PRINT(("HEIGHT: %u\n", ihdr_infos.height));
+  DEBUG_PRINT(("WIDTH: %u\n", ihdr_infos.width));
+  DEBUG_PRINT(("BIT_DEPTH: %u\n", ihdr_infos.bit_depth));
 
   // Don't compress, since we are merely copying it to memory,
   // we will be decompressing it again anyway
@@ -176,6 +177,7 @@ pthread_t begin(char* infname_sans_ext, unsigned char *png_buf, long long png_le
 
   int chunk_count = 0;
 
+  printf("Uncompressing image data...\n");
   while (1) {
     unsigned char chunk_label[4];
     unsigned char chunk_len_buf[4];
@@ -219,7 +221,7 @@ pthread_t begin(char* infname_sans_ext, unsigned char *png_buf, long long png_le
 
       //Stop if error
       if (check_uncompress == NULL) {
-        print_error_html(GLITCH_ERROR);
+        DEBUG_PRINT((E_GLITCH));
         free(ancil_chunks_buf);
         free(raw_chunk_buf);
         free(unzip_idats_buf);
@@ -258,7 +260,6 @@ pthread_t begin(char* infname_sans_ext, unsigned char *png_buf, long long png_le
     }
   }
 
-  
   //buf contains all idats uncompressed, concatenated
   unsigned long unzipped_idats_len = inflate_stream.total_out; 
   unzip_idats_buf = realloc(unzip_idats_buf, unzipped_idats_len);
@@ -267,15 +268,9 @@ pthread_t begin(char* infname_sans_ext, unsigned char *png_buf, long long png_le
   free(ENTIRE_PNG_BUF);
   inflateEnd(&inflate_stream);
 
-  DEBUG_PRINT(("Unzipped %lld bytes of data to %lld bytes\n", zipped_idats_len, unzipped_idats_len));
+  printf("Uncompressed %lld bytes to %ld bytes\n", zipped_idats_len, unzipped_idats_len);
 
-  char output_dir[] = OUTPUT_DIRECTORY;
-
-
-  char *out_file_paths = malloc(MAX_PATH_LENGTH*NUM_OUTPUT_FILES);
-
-  //add entropy to filename
-  unsigned long unix_time = (unsigned long)clock();
+  printf("Glitching image data...\n");
 
   for (int g=0;g<NUM_OUTPUT_FILES;g++) {
 
@@ -300,16 +295,17 @@ pthread_t begin(char* infname_sans_ext, unsigned char *png_buf, long long png_le
         unzipped_idats_len, &glitched_idats_len);
 
     if (glitched_idats == NULL) {
-      print_error_html(GLITCH_ERROR);
+      DEBUG_PRINT((E_GLITCH));
       free (unzip_idats_buf);
       free (ancil_chunks_buf);
       return -1;
     }
 
-    char* path = out_file_paths + (g * MAX_PATH_LENGTH);
+    char path[MAX_PATH_LENGTH];
+    bzero(path, MAX_PATH_LENGTH);
 
-    snprintf(path, MAX_PATH_LENGTH, "%s/%s-%lu-%d.png", output_dir,
-        infname_sans_ext, unix_time, g);
+    snprintf(path, MAX_PATH_LENGTH, "%s%s%s-%d.png", OUTPUT_DIRECTORY, DIR_SEP,
+        base_file_name, g);
 
     DEBUG_PRINT(("Output file name is %s\n", path));
 
@@ -318,31 +314,52 @@ pthread_t begin(char* infname_sans_ext, unsigned char *png_buf, long long png_le
     write_glitched_image(glitched_idats, glitched_idats_len, ihdr_bytes_buf,
         ancil_chunks_buf, ancil_chunks_len, outfp);
 
+    printf("%s\n", path);
+    fflush(stdout);
+
     fclose(outfp);
     free(glitched_idats);
   }
 
   free(ancil_chunks_buf);
-
-  char *ofp = out_file_paths;
-  int o = MAX_PATH_LENGTH; //offset
-  print_success_html(ofp + (o*0), ofp + (o*1), ofp + (o*2),
-      ofp + (o*3), ofp + (o*4),ofp + (o*5), ofp + (o*6));
-
-  //Use pthread to delete image after a certain interval
-  pthread_t thread;
-  pthread_create(&thread, NULL, thread_delete_files, out_file_paths);
-  pthread_detach(thread);
-
   free(unzip_idats_buf);
+  return 0;
+}
 
-  return thread;
+void remove_filename_extension(char* filename) {
+
+  char *dot_p = rindex(filename, '.');
+
+  if (dot_p == NULL)
+    return;
+
+  dot_p[0] = '\0';
+}
+
+long get_file_buf(FILE *f, unsigned char **buf) {
+
+  const int readsize = 4096;
+  long buf_size = 0;
+
+  while (1) {
+
+    *buf = realloc(*buf, buf_size+readsize);
+
+    int read = fread(((*buf)+buf_size), 1, readsize, f);
+
+    buf_size += read;
+
+    if (read == 0)
+      break;
+
+  }
+
+  *buf = realloc(*buf, buf_size);
+
+  return buf_size;
 }
 
 int main(int argc, char* argv[]) {
-
-  success_template = load_html_template(SUCCESS_FILE_PATH);
-  error_template = load_html_template(ERROR_FILE_PATH);
 
   int mkdir_ret = mkdir(OUTPUT_DIRECTORY, S_IRWXU);
 
@@ -351,112 +368,33 @@ int main(int argc, char* argv[]) {
   else if (access(OUTPUT_DIRECTORY, W_OK | X_OK))
     error_fatal(1, "Problem accessing directory", strerror(errno));
 
-  if (error_template == NULL || success_template == NULL ) {
-    printf("pnglitch init: Cannot load templates!\n");
-    OS_LibShutdown();
-    return -1;
-  }
+  for (int i=1;i<argc;i++) {
 
-  while (FCGI_Accept() >= 0) {
+    FILE *f = fopen(argv[i], "rb");
 
-    printf("content-type: text/html\r\n\r\n");
-
-    long long bytes_disk_used = get_dir_bytesize(OUTPUT_DIRECTORY);
-
-    //This acts as a way of limiting DDOS for both disk usage and memory
-    if (bytes_disk_used > MAX_DISK_USAGE) {
-      DEBUG_PRINT(("Using too much disk! (%lld < %lld)\n", bytes_disk_used,
-            MAX_DISK_USAGE));
-      print_error_html(BUSY_ERROR);
+    if (f == NULL) {
+      printf("Cannot open file '%s'\n", argv[i]);
       continue;
     }
 
-    long content_length = get_content_length();
+    unsigned char* png_buf = calloc(1, 1);
 
-    if (content_length <= 0) {
-      switch (content_length) {
-        case -1: print_error_html(UPLOAD_ERROR); break;
-        case -2: print_error_html("The uploaded file is too big! Maximum file size is 10MB"); break;
-        case -3: print_error_html("The file was too small! Please upload a valid PNG file!"); break;
-        default: print_error_html(UPLOAD_ERROR); 
-      }
-      continue;
-    }
+    PNG_LENGTH = get_file_buf(f, &png_buf);
 
-    char *form_boundary_buf = malloc(MAX_FORM_BOUNDARY_LENGTH);
-    bzero(form_boundary_buf, MAX_FORM_BOUNDARY_LENGTH);
-
-    int form_boundary_buf_len = get_form_boundary(form_boundary_buf);
-
-    if (form_boundary_buf_len <= 0) {
-      print_error_html(UPLOAD_ERROR);
-      free(form_boundary_buf);
-      continue;
-    }
-
-    form_boundary_buf = realloc(form_boundary_buf, form_boundary_buf_len);
-
-    char* form_meta_buf = calloc(MAX_FORM_META_LENGTH, 1);
-    bzero(form_meta_buf, MAX_FORM_META_LENGTH);
-    int form_meta_buf_sz  = get_form_meta_buf(form_meta_buf);
-
-    //dbg_printbuffer((unsigned char*)form_meta_buf, form_meta_buf_sz);
-
-    if (form_meta_buf_sz <= 0) {
-      free(form_boundary_buf);
-      free(form_meta_buf);
-      print_error_html(UPLOAD_ERROR);
-      continue;
-    }
-
-    form_meta_buf = realloc(form_meta_buf, form_meta_buf_sz+1);
-    form_meta_buf[form_meta_buf_sz] = '\0';
-
-    char *form_filename_buf = malloc(MAX_FILENAME_LENGTH);
-    bzero(form_filename_buf, MAX_FILENAME_LENGTH);
-
-    char *form_filename = 
-      get_form_filename(form_meta_buf, form_filename_buf);
-
-    free(form_meta_buf);
-
-    if (form_filename == NULL) {
-      free(form_filename_buf);
-      free(form_boundary_buf);
-      print_error_html(UPLOAD_ERROR);
-      continue;
-    }
-
-    unsigned char *png_buf = calloc(content_length, 1);
-
-    PNG_LENGTH = get_uploaded_file_buf(png_buf, content_length,
-        form_boundary_buf, form_boundary_buf_len);
-
-    free(form_boundary_buf);
-    DEBUG_PRINT(("Size of uploaded png: %ld\n", PNG_LENGTH));
+    printf("Glitching file '%s' of size %.2lfM\n", argv[i], PNG_LENGTH / 1024.0 / 1024.0);
 
     if (PNG_LENGTH <= 0) {
-      free(form_filename_buf);
+      printf("File '%s' is empty!\n", argv[i]);
       free(png_buf);
-      print_error_html(UPLOAD_ERROR);
       continue;
     }
 
+    remove_filename_extension(argv[i]);
+
     //png buff is passed around to callbacks for libpng, it will be free'd there
-    png_buf = realloc(png_buf, PNG_LENGTH);
-    //pthread_t ret = begin(form_filename, png_buf, PNG_LENGTH);
-    begin(form_filename, png_buf, PNG_LENGTH);
-    free(form_filename_buf);
+    begin(argv[i], png_buf, PNG_LENGTH);
+    fclose(f);
   }
-
-  //When not in an fcgi environment, there will be memleaks 
-  //here because of the paths buffer passed to pthread
-  //usleep(TIME_BEFORE_DELETION*1.1);
-
-  OS_LibShutdown();
-
-  free(success_template);
-  free(error_template);
 
   return 0;
 }

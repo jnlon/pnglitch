@@ -1,6 +1,6 @@
 #include <stdlib.h>
 #include <string.h>
-#include <fcgi_stdio.h>
+#include <stdio.h>
 #include "debug.h"
 #include "bufs.h"
 
