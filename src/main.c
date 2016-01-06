@@ -381,7 +381,7 @@ int main(int argc, char* argv[]) {
 
     PNG_LENGTH = get_file_buf(f, &png_buf);
 
-    printf("Glitching file '%s' of size %.2lfM\n", argv[i], PNG_LENGTH / 1024.0 / 1024.0);
+    printf("Glitching file '%s' (%.2lfM)\n", argv[i], PNG_LENGTH / 1024.0 / 1024.0);
 
     if (PNG_LENGTH <= 0) {
       printf("File '%s' is empty!\n", argv[i]);
@@ -389,6 +389,7 @@ int main(int argc, char* argv[]) {
       continue;
     }
 
+    argv[i] = basename(argv[i]);
     remove_filename_extension(argv[i]);
 
     //png buff is passed around to callbacks for libpng, it will be free'd there
