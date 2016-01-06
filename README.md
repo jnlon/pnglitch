@@ -1,2 +1,2 @@
-# pnglitch\_webapp
+# pnglitch
 Commandline version of pnglitch\_webapp 
