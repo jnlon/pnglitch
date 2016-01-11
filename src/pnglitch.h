@@ -27,7 +27,7 @@ void glitch_filter(unsigned char *data, unsigned long data_len, unsigned int sca
 
 void glitch_random_filter(unsigned char *data, unsigned long data_len, unsigned int scanline_len);
 
-unsigned char *zip_idats(unsigned char *raw_data, ulong data_len, long long *compressed_length);
+unsigned char *zip_idats(unsigned char *raw_data, unsigned long data_len, long long *compressed_length);
 
 
 unsigned char *uncompress_buffer(struct z_stream_s *inflate_stream, 

@@ -1,7 +1,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <zlib.h>
-#include <arpa/inet.h>
+//#include <arpa/inet.h>
 #include <png.h>
 #include <stdio.h>
 
@@ -60,7 +60,7 @@ unsigned char *uncompress_buffer(struct z_stream_s *inflate_stream,
 
 }
 
-unsigned char *zip_idats(unsigned char *raw_data, ulong data_len, long long *compressed_length) {
+unsigned char *zip_idats(unsigned char *raw_data, unsigned long data_len, long long *compressed_length) {
 
   DEBUG_PRINT(("Zipping glitched buffer length %ld\n", data_len));
 
@@ -188,7 +188,7 @@ void write_glitched_image(unsigned char *glitched_idats,
   while (bytes_left > 0) {
 
     idat_len = (bytes_left < idat_len) ? bytes_left : idat_len;
-    uint32_t idat_len_buf = htonl(idat_len);
+    uint32_t idat_len_buf = __builtin_bswap32(idat_len);
 
     DEBUG_PRINT(("idat_len: %d\n", idat_len));
 
@@ -197,7 +197,7 @@ void write_glitched_image(unsigned char *glitched_idats,
 
     //calculate crc
     uint32_t idat_data_crc = crc32(0L, idats_stream, idat_len); 
-    uint32_t idat_crc = htonl(crc32_combine(idat_ihdr_crc, idat_data_crc, idat_len));
+    uint32_t idat_crc = __builtin_bswap32(crc32_combine(idat_ihdr_crc, idat_data_crc, idat_len));
 
     fwrite(idats_stream, 1, idat_len, fp);
     fwrite(&idat_crc, sizeof(idat_crc), 1, fp);

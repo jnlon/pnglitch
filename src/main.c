@@ -1,5 +1,6 @@
 #define _GNU_SOURCE
 #include <png.h>
+#include <pngconf.h>
 #include <string.h>
 #include <stdlib.h>
 #include <zlib.h>
@@ -7,8 +8,6 @@
 #include <sys/stat.h>
 #include <errno.h>
 #include <libgen.h>
-#include <pthread.h>
-#include <time.h>
 
 #include "libs.h"
 #include "globals.h"
@@ -25,7 +24,16 @@ long long PNG_LENGTH;
 #define E_INVALID "Input file is not a valid PNG!\n"
 #define MAX_PATH_LENGTH 256*2
 #define NUM_OUTPUT_FILES 7
+
+#ifdef __MINGW32__
+#define DIR_SEP "\\"
+#define mkdir _mkdir //TODO: make this work, args differ
+#endif
+
+#ifdef __linux__
 #define DIR_SEP "/"
+#endif
+
 
 /* Use Libpng to tansform the input into into RGB format 
  * (basically re-encode image using all filter methods)
@@ -64,7 +72,7 @@ int begin(char* base_file_name, unsigned char *png_buf, long long png_length) {
 
   //Transform all PNG image types to RGB
   int transforms = 
-    PNG_TRANSFORM_GRAY_TO_RGB |
+    //PNG_TRANSFORM_GRAY_TO_RGB |
     PNG_TRANSFORM_STRIP_ALPHA | 
     PNG_TRANSFORM_EXPAND;
 
@@ -302,7 +310,7 @@ int begin(char* base_file_name, unsigned char *png_buf, long long png_length) {
     }
 
     char path[MAX_PATH_LENGTH];
-    bzero(path, MAX_PATH_LENGTH);
+    memset(path, 0, MAX_PATH_LENGTH);
 
     snprintf(path, MAX_PATH_LENGTH, "%s%s%s-%d.png", OUTPUT_DIRECTORY, DIR_SEP,
         base_file_name, g);
@@ -328,7 +336,7 @@ int begin(char* base_file_name, unsigned char *png_buf, long long png_length) {
 
 void remove_filename_extension(char* filename) {
 
-  char *dot_p = rindex(filename, '.');
+  char *dot_p = strrchr(filename, '.');
 
   if (dot_p == NULL)
     return;
@@ -361,7 +369,8 @@ long get_file_buf(FILE *f, unsigned char **buf) {
 
 int main(int argc, char* argv[]) {
 
-  int mkdir_ret = mkdir(OUTPUT_DIRECTORY, S_IRWXU);
+  //int mkdir_ret = mkdir(OUTPUT_DIRECTORY, S_IRWXU);
+  int mkdir_ret = mkdir(OUTPUT_DIRECTORY);
 
   if (mkdir_ret == -1 && errno != EEXIST)
     error_fatal(1, "problem creating directory", strerror(errno));
@@ -381,7 +390,7 @@ int main(int argc, char* argv[]) {
 
     PNG_LENGTH = get_file_buf(f, &png_buf);
 
-    printf("Glitching file '%s' (%.2lfM)\n", argv[i], PNG_LENGTH / 1024.0 / 1024.0);
+    printf("Glitching file '%s' of size %.2lfM\n", argv[i], PNG_LENGTH / 1024.0 / 1024.0);
 
     if (PNG_LENGTH <= 0) {
       printf("File '%s' is empty!\n", argv[i]);
@@ -389,7 +398,6 @@ int main(int argc, char* argv[]) {
       continue;
     }
 
-    argv[i] = basename(argv[i]);
     remove_filename_extension(argv[i]);
 
     //png buff is passed around to callbacks for libpng, it will be free'd there
