@@ -27,12 +27,14 @@ long long PNG_LENGTH;
 
 #ifdef __MINGW32__
 #define DIR_SEP "\\"
-#define mkdir _mkdir //TODO: make this work, args differ
+#define MKDIR(path) (_mkdir(path))
 #endif
 
 #ifdef __linux__
+#define MKDIR(path) (mkdir(path, S_IRWXU))
 #define DIR_SEP "/"
 #endif
+
 
 
 /* Use Libpng to tansform the input into into RGB format 
@@ -370,7 +372,7 @@ long get_file_buf(FILE *f, unsigned char **buf) {
 int main(int argc, char* argv[]) {
 
   //int mkdir_ret = mkdir(OUTPUT_DIRECTORY, S_IRWXU);
-  int mkdir_ret = mkdir(OUTPUT_DIRECTORY);
+  int mkdir_ret = MKDIR(OUTPUT_DIRECTORY);
 
   if (mkdir_ret == -1 && errno != EEXIST)
     error_fatal(1, "problem creating directory", strerror(errno));
