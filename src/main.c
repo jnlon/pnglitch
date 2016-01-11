@@ -401,6 +401,7 @@ int main(int argc, char* argv[]) {
     }
 
     remove_filename_extension(argv[i]);
+    argv[i] = basename(argv[i]);
 
     //png buff is passed around to callbacks for libpng, it will be free'd there
     begin(argv[i], png_buf, PNG_LENGTH);
