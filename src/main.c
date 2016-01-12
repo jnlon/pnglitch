@@ -368,6 +368,12 @@ int main(int argc, char* argv[]) {
   else if (access(OUTPUT_DIRECTORY, W_OK | X_OK))
     error_fatal(1, "Problem accessing directory", strerror(errno));
 
+  if (argc <= 1) {
+
+    printf("TODO: Launch UI");
+    exit(1);
+
+  }
   for (int i=1;i<argc;i++) {
 
     FILE *f = fopen(argv[i], "rb");
