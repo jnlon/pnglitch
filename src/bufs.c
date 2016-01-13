@@ -36,6 +36,7 @@ void buf_slice(long start, long len, BYTE* result, BYTE* data)  {
   memcpy(result, &data[start], len);
 }
 
+//TODO: I should really be using fmemopen instead. This accomplishes the same task.
 //Note: base_offset is incremented automatically, so PNG_LENGTH is incremented here
 void append_bytes(BYTE *basebuf, BYTE *inbuf, long long *base_offset, int inbuf_length) {
   BYTE* end_of_buf = basebuf + *base_offset;

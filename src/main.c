@@ -361,7 +361,6 @@ long get_file_buf(FILE *f, unsigned char **buf) {
 
     if (read == 0)
       break;
-
   }
 
   *buf = realloc(*buf, buf_size);
@@ -379,32 +378,60 @@ int main(int argc, char* argv[]) {
   else if (access(OUTPUT_DIRECTORY, W_OK | X_OK))
     error_fatal(1, "Problem accessing directory", strerror(errno));
 
-  for (int i=1;i<argc;i++) {
+  char path[500];
 
-    FILE *f = fopen(argv[i], "rb");
+  //No commandline arguments, so prompt for path
+  while (argc <= 1) {
+    printf("Enter PNG file path: ");
+    char *s = fgets(path, 499, stdin);
+
+    if (s == NULL)
+      continue;
+
+    char *newline = strrchr(s, '\n');
+    *newline = '\0';
+
+    FILE *f = fopen(s, "r");
 
     if (f == NULL) {
-      printf("Cannot open file '%s'\n", argv[i]);
+      printf("Could not open file '%s'\n", s);
+      continue;
+    }
+
+    fclose(f);
+    argc++;
+    
+    argv[1] = path; //Is this out of bounds?
+  }
+
+
+  for (int i=1;i<argc;i++) {
+
+    char *file_path = argv[i];
+
+    FILE *f = fopen(file_path, "rb");
+
+    if (f == NULL) {
+      printf("Cannot open file '%s'\n", file_path);
       continue;
     }
 
     unsigned char* png_buf = calloc(1, 1);
 
-    PNG_LENGTH = get_file_buf(f, &png_buf);
-
-    printf("Glitching file '%s' of size %.2lfM\n", argv[i], PNG_LENGTH / 1024.0 / 1024.0);
+    PNG_LENGTH = get_file_buf(f, &png_buf); 
+    printf("Glitching file '%s' (%.2lfM)\n", file_path, PNG_LENGTH / 1024.0 / 1024.0);
 
     if (PNG_LENGTH <= 0) {
-      printf("File '%s' is empty!\n", argv[i]);
+      printf("File '%s' is empty!\n", file_path);
       free(png_buf);
       continue;
     }
 
-    remove_filename_extension(argv[i]);
-    argv[i] = basename(argv[i]);
+    file_path = basename(file_path);
+    remove_filename_extension(file_path);
 
-    //png buff is passed around to callbacks for libpng, it will be free'd there
-    begin(argv[i], png_buf, PNG_LENGTH);
+    //png_buf is passed around to callbacks for libpng, it will be free'd there
+    begin(file_path, png_buf, PNG_LENGTH);
     fclose(f);
   }
 
