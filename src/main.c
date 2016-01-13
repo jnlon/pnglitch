@@ -435,5 +435,7 @@ int main(int argc, char* argv[]) {
     fclose(f);
   }
 
+  printf("Done! Press return to quit");
+  getc(stdin);
   return 0;
 }
